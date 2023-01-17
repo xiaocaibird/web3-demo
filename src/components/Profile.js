@@ -6,13 +6,18 @@ import {
   useEnsAvatar,
   useEnsName,
   useContractRead,
-  useContractWrite,
-  usePrepareContractWrite,
 } from 'wagmi'
-import { Contract } from 'ethers'
+import { Contract, providers } from 'ethers'
 import { MetaMaskConnector } from 'wagmi/connectors/metaMask'
 
 import abi from './abi';
+
+const contractAddress = '0x436500248A0E7494dc12D953e7EA00B8A50B9710';
+const signer = new providers.Web3Provider(
+  window.ethereum,
+  "any"
+).getSigner();
+const con = new Contract(contractAddress, abi, signer);
 
 export function Profile() {
   const [total, setTotal] = useState(1);
@@ -26,20 +31,13 @@ export function Profile() {
   const { disconnect } = useDisconnect()
 
   const { data } = useContractRead({
-    address: '0x436500248A0E7494dc12D953e7EA00B8A50B9710',
+    address: contractAddress,
     abi,
     functionName: 'getInfo',
   });
 
-
-  const { config } = usePrepareContractWrite({
-    address: '0x436500248A0E7494dc12D953e7EA00B8A50B9710',
-    abi,
-    functionName: 'mint',
-    args: [1]
-  })
-  const { write } = useContractWrite(config)
-  console.log('write:', write);
+  const price = data?.runtimeConfig?.publicMintPrice?.toString();
+  console.log(data);
   return (<>
     {isConnected ?
       <div>
@@ -50,9 +48,31 @@ export function Profile() {
         <br />
         名称: {data?.deploymentConfig?.name} <br />
         作者： {data?.deploymentConfig?.owner} <br />
-        价格: {data?.runtimeConfig?.publicMintPrice?.toString()} wei <br />
-        数量：<input type='number' value={total} onChange={e => setTotal(e.target.value)} min={1} max={2} /> <br />
-        <button onClick={() => write?.()}>购买(mint)</button>
+        价格: {price} wei <br />
+        每次限购：{data?.deploymentConfig?.tokensPerMint.toString()} 个 <br />
+        数量：<input type='number' value={total} onChange={e => setTotal(e.target.value)} min={1} max={data?.deploymentConfig?.tokensPerMint.toString()} /> <br />
+        <button onClick={async () => {
+          try {
+            // eslint-disable-next-line no-undef
+            await con.mint(total, { from: address, value: BigInt(total * price) });
+          } catch (e) {
+            alert(`购买失败，详情如下：
+            ${e.message}`);
+          }
+        }}>购买(mint)</button>
+        <br />
+        <br />
+        {
+          address === data?.deploymentConfig?.owner ? <button onClick={async () => { 
+            try {
+              // eslint-disable-next-line no-undef
+              await con.withdrawFees();
+            } catch (e) {
+              alert(`提现失败，详情如下：
+              ${e.message}`);
+            }
+          }}>您是作者可以：提现</button> : null
+        }
       </div> :
       <div>
         <button
